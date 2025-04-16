@@ -35,6 +35,6 @@ This is a **Restaurant Management System** built using **Flutter** for the front
 4. Database Setup:
 The project uses an SQLite database to store the restaurant's menu items. The database is pre-configured, so you should be good to go once you run the app.
 
-### Windows Executable:
+## Windows Executable:
 
 An .exe file is also available for Windows users. You can simply download and install the application on your desktop without setting up the development environment.
