@@ -76,7 +76,7 @@ class DatabaseHelper {
     }).toList();
   }
 
-  Future<List<Map<String, dynamic>>> fetchTopProducts() async {
+  /*Future<List<Map<String, dynamic>>> fetchTopProducts() async {
     final db = await database;
     final today = DateTime.now().toIso8601String().split('T')[0];
 
@@ -98,18 +98,18 @@ class DatabaseHelper {
         CASE
           WHEN product_name LIKE '%Biryani%' THEN 'Biryani'
           WHEN product_name LIKE '%Pulao%' THEN 'Pulao'
-          WHEN product_name IN ('Chicken Karahi Half', 'Chicken Karahi Full') THEN 'Chicken Karahi'
-          WHEN product_name IN ('Chicken Kaleji Half', 'Chicken Kaleji Full') THEN 'Chicken Kaleji'
-          WHEN product_name IN ('Qeema Half', 'Qeema Full') THEN 'Qeema'
-          WHEN product_name IN ('Daal Mach Half', 'Daal Mach Full') THEN 'Daal Mach'
-          WHEN product_name IN ('Channa Half', 'Channa Full') THEN 'Channa'
-          WHEN product_name IN ('Murgh Channa Half', 'Murgh Channa Full') THEN 'Murgh Channa'
-          WHEN product_name IN ('Anda Channa Half', 'Anda Channa Full') THEN 'Anda Channa'
-          WHEN product_name IN ('Aalo Anda Half', 'Aalo Anda Full') THEN 'Aalo Anda'
-          WHEN product_name IN ('Daal Channa Half', 'Daal Channa Full') THEN 'Daal Channa'
-          WHEN product_name IN ('Aalo Palak Half', 'Aalo Palak Full') THEN 'Aalo Palak'
-          WHEN product_name IN ('Mix Sabzi Half', 'Mix Sabzi Full') THEN 'Mix Sabzi'
-          WHEN product_name IN ('Kari Pakora Half', 'Kari Pakora Full') THEN 'Kari Pakora'
+          WHEN product_name LIKE '%Karahi%' THEN 'Chi-Karahi'
+          WHEN product_name LIKE '%Kaleji%' THEN 'Chi-Kaleji'
+          WHEN product_name LIKE '%Qeema%' THEN 'Qeema'
+          WHEN product_name LIKE '%Daal Mach%' THEN 'Daal Mach'
+          WHEN product_name LIKE '%Channa%' THEN 'Channa'
+          WHEN product_name LIKE '%Murgh Channa%' THEN 'Murgh Channa'
+          WHEN product_name LIKE '%Anda Channa%' THEN 'Anda Channa'
+          WHEN product_name LIKE '%Aalo Anda%' THEN 'Aalo Anda'
+          WHEN product_name LIKE '%Daal Channa%' THEN 'Daal Channa'
+          WHEN product_name LIKE '%Aalo Palak%' THEN 'Aalo Palak'
+          WHEN product_name LIKE '%Mix Sabzi%' THEN 'Mix Sabzi'
+          WHEN product_name LIKE '%Kari Pakora%' THEN 'Kari Pakora'
           ELSE 'Other'
         END AS category,
         SUM(quantity) as quantity,
@@ -123,6 +123,154 @@ class DatabaseHelper {
   ''',
       [today],
     );
+  }*/
+
+  Future<List<Map<String, dynamic>>> fetchTopProducts() async {
+    final db = await database;
+    final today = DateTime.now().toIso8601String().split('T')[0];
+
+    // Get all today's product sales for categories 1, 2, 3
+    final rawSalesResults = await db.rawQuery(
+      '''
+    SELECT 
+      od.quantity,
+      m.product_name,
+      m.price,
+      m.category_id
+    FROM order_details od
+    JOIN orders o ON od.order_id = o.order_id
+    JOIN menu m ON od.product_id = m.product_id
+    WHERE date(o.order_date) = ? AND m.category_id IN (1, 2, 3)
+    ''',
+      [today],
+    );
+
+    // Get all products in categories 1, 2, and 3 (including those with 0 sales)
+    final rawMenuResults = await db.rawQuery('''
+    SELECT 
+      m.product_name,
+      m.price,
+      m.category_id
+    FROM menu m
+    WHERE m.category_id IN (1, 2, 3)
+    ''');
+
+    Map<String, Map<String, dynamic>> grouped = {};
+
+    // Define the terms to exclude
+    List<String> excludeTerms = ['salan', 'zarda', 'delivery charges', 'box'];
+
+    // Initialize categories with 0 sales
+    for (var row in rawMenuResults) {
+      String name = row['product_name'] as String;
+      double price = (row['price'] as num).toDouble();
+      String category;
+
+      String lower = name.toLowerCase();
+
+      // Check if product name contains any of the exclude terms
+      if (excludeTerms.any((term) => lower.contains(term))) {
+        continue; // Skip this product
+      }
+
+      if (name.isEmpty) {
+        continue; // Skip this product
+      }
+
+      // Group Biryani and Pulao together
+      if (lower.contains('biryani')) {
+        category = 'Biryani';
+      } else if (lower.contains('pulao')) {
+        category = 'Pulao';
+      }
+      // Dynamically group Salan-related items
+      else {
+        String cleaned =
+            lower
+                .replaceAll(
+                  RegExp(r'\b(half|full|plate|small|large|pcs?|kg|gm)\b'),
+                  '',
+                )
+                .replaceAll(RegExp(r'\d+(\.\d+)?\s*(kg|gm|pcs?)?'), '')
+                .replaceAll(RegExp(r'\s+'), ' ')
+                .trim();
+
+        // Capitalize each word to match the format
+        category = cleaned
+            .split(' ')
+            .map(
+              (word) =>
+                  word.isNotEmpty
+                      ? '${word[0].toUpperCase()}${word.substring(1)}'
+                      : '',
+            )
+            .join(' ');
+      }
+
+      // Initialize the category with 0 sales if not already present
+      if (!grouped.containsKey(category)) {
+        grouped[category] = {
+          'category': category,
+          'quantity': 0,
+          'total_price': 0.0,
+        };
+      }
+    }
+
+    // Add sales data to the categories
+    for (var row in rawSalesResults) {
+      String name = row['product_name'] as String;
+      int quantity = row['quantity'] as int;
+      double price = (row['price'] as num).toDouble();
+
+      String lower = name.toLowerCase();
+      String category;
+
+      // Check if product name contains any of the exclude terms
+      if (excludeTerms.any((term) => lower.contains(term))) {
+        continue; // Skip this product
+      }
+
+      // Group Biryani and Pulao together
+      if (lower.contains('biryani')) {
+        category = 'Biryani';
+      } else if (lower.contains('pulao')) {
+        category = 'Pulao';
+      }
+      // Dynamically group Salan-related items
+      else {
+        String cleaned =
+            lower
+                .replaceAll(
+                  RegExp(r'\b(half|full|plate|small|large|pcs?|kg|gm)\b'),
+                  '',
+                )
+                .replaceAll(RegExp(r'\d+(\.\d+)?\s*(kg|gm|pcs?)?'), '')
+                .replaceAll(RegExp(r'\s+'), ' ')
+                .trim();
+
+        // Capitalize each word to match the format
+        category = cleaned
+            .split(' ')
+            .map(
+              (word) =>
+                  word.isNotEmpty
+                      ? '${word[0].toUpperCase()}${word.substring(1)}'
+                      : '',
+            )
+            .join(' ');
+      }
+
+      // Update the quantity and price for the corresponding category
+      if (grouped.containsKey(category)) {
+        grouped[category]!['quantity'] += quantity;
+        grouped[category]!['total_price'] += quantity * price;
+      }
+    }
+
+    // Convert and sort by quantity in descending order
+    return grouped.values.toList()
+      ..sort((a, b) => (b['quantity'] as int).compareTo(a['quantity'] as int));
   }
 
   Future<List<Map<String, dynamic>>> fetchMenuItems() async {

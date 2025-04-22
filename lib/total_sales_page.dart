@@ -26,8 +26,8 @@ class _TotalSalesPageState extends State<TotalSalesPage> {
   final List<String> productCategories = [
     "Biryani",
     "Pulao",
-    "Chicken Karahi",
-    "Chicken Kaleji",
+    "Chi-Karahi",
+    "Chi-Kaleji",
     "Qeema",
     "Daal Mach",
     "Channa",
@@ -156,24 +156,16 @@ class _TotalSalesPageState extends State<TotalSalesPage> {
                     );
                   }
 
-                  // Always use the data, even if empty
                   salesData = snapshot.data ?? [];
 
                   if (selectedTimeframe == "Top Products") {
-                    // For Top Products, ensure we have data for all categories
                     if (salesData.isEmpty) {
-                      // Create empty data for all categories
-                      salesData =
-                          productCategories
-                              .map(
-                                (category) => {
-                                  'product_name': category,
-                                  'quantity': 0,
-                                },
-                              )
-                              .toList();
+                      return const Center(
+                        child: Text("No sales data available today."),
+                      );
                     }
-                    return _buildTopProductsChart();
+
+                    return _buildTopProductsChart(salesData);
                   } else {
                     // For other timeframes, ensure we have data for all periods
                     if (salesData.isEmpty) {
@@ -381,24 +373,22 @@ class _TotalSalesPageState extends State<TotalSalesPage> {
     );
   }
 
-  Widget _buildTopProductsChart() {
-    final categoryData = {
-      for (var item in salesData)
-        item['category'].toString(): {
-          'quantity': item['quantity']?.toDouble() ?? 0.0,
-          'total_price': item['total_price']?.toDouble() ?? 0.0,
-        },
-    };
+  Widget _buildTopProductsChart(List<Map<String, dynamic>> salesData) {
+    // Build category data from dynamic salesData
+    final Map<String, Map<String, double>> categoryData = {};
 
-    // Fill missing categories with 0 values
-    for (var category in productCategories) {
-      categoryData.putIfAbsent(
-        category,
-        () => {'quantity': 0.0, 'total_price': 0.0},
-      );
+    for (var item in salesData) {
+      final category = item['category'] as String;
+      final quantity = (item['quantity'] as num).toDouble();
+      final totalPrice = (item['total_price'] as num).toDouble();
+
+      categoryData[category] = {
+        'quantity': quantity,
+        'total_price': totalPrice,
+      };
     }
 
-    // Sort by quantity (descending)
+    // Sort by quantity
     final sortedCategories =
         categoryData.entries.toList()..sort(
           (a, b) => b.value['quantity']!.compareTo(a.value['quantity']!),
@@ -418,7 +408,7 @@ class _TotalSalesPageState extends State<TotalSalesPage> {
           barRods: [
             BarChartRodData(
               toY: entry.value['quantity']!,
-              color: _getCategoryColor(entry.key),
+              color: _getCategoryColor(i),
               width: 20,
               borderRadius: BorderRadius.circular(4),
             ),
@@ -429,7 +419,7 @@ class _TotalSalesPageState extends State<TotalSalesPage> {
 
     return BarChart(
       BarChartData(
-        maxY: 500, // Fixed max at 500 for quantities
+        maxY: 500,
         minY: 0,
         barGroups: barGroups,
         titlesData: FlTitlesData(
@@ -438,7 +428,7 @@ class _TotalSalesPageState extends State<TotalSalesPage> {
               showTitles: true,
               interval: 50,
               reservedSize: 40,
-              getTitlesWidget: (value, meta) {
+              getTitlesWidget: (value, _) {
                 return Text(
                   value.toInt().toString(),
                   style: const TextStyle(fontSize: 10),
@@ -449,6 +439,7 @@ class _TotalSalesPageState extends State<TotalSalesPage> {
           bottomTitles: AxisTitles(
             sideTitles: SideTitles(
               showTitles: true,
+              reservedSize: 60,
               getTitlesWidget: (double value, TitleMeta meta) {
                 if (value.toInt() >= 0 &&
                     value.toInt() < categoryLabels.length) {
@@ -456,7 +447,6 @@ class _TotalSalesPageState extends State<TotalSalesPage> {
                   final price =
                       sortedCategories[value.toInt()].value['total_price']!
                           .toInt();
-
                   return Column(
                     children: [
                       Text(
@@ -479,7 +469,6 @@ class _TotalSalesPageState extends State<TotalSalesPage> {
                 }
                 return const SizedBox.shrink();
               },
-              reservedSize: 50,
             ),
           ),
           rightTitles: const AxisTitles(
@@ -495,23 +484,8 @@ class _TotalSalesPageState extends State<TotalSalesPage> {
     );
   }
 
-  Color _getCategoryColor(String category) {
-    // Assign different colors to different categories
-    final colors = [
-      Colors.blue,
-      Colors.blue,
-      Colors.blue,
-      Colors.blue,
-      Colors.blue,
-      Colors.blue,
-      Colors.blue,
-      Colors.blue,
-      Colors.blue,
-      Colors.blue,
-    ];
-
-    int index = productCategories.indexOf(category) % colors.length;
-    return colors[index];
+  Color _getCategoryColor(int index) {
+    return Colors.blue;
   }
 
   double _calculateMaxY() {
