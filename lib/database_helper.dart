@@ -163,6 +163,7 @@ class DatabaseHelper {
     // Initialize categories with 0 sales
     for (var row in rawMenuResults) {
       String name = row['product_name'] as String;
+      // ignore: unused_local_variable
       double price = (row['price'] as num).toDouble();
       String category;
 
