@@ -371,30 +371,6 @@ class DatabaseHelper {
     };
   }
 
-  /*Future<List<Map<String, dynamic>>> fetchCategorySales() async {
-    final db = await database;
-    return await db.rawQuery('''
-    SELECT 
-        c.category_name,
-        COALESCE(SUM(sales_count), 0) AS sales_count
-    FROM categories c
-    LEFT JOIN (
-        SELECT 
-            m.category_id,
-            COUNT(o.order_id) AS sales_count
-        FROM order_details o
-        JOIN menu m ON o.product_id = m.product_id
-        WHERE o.order_id IN (
-            SELECT order_id FROM orders
-            WHERE order_date >= date('now', '-1 month')
-        )
-        GROUP BY m.category_id
-    ) s ON c.category_id = s.category_id
-    GROUP BY c.category_name
-    ORDER BY sales_count DESC;
-    ''');
-  }*/
-
   Future<List<Map<String, dynamic>>> fetchProductSales() async {
     final db = await database;
     return await db.rawQuery('''
@@ -418,10 +394,10 @@ class DatabaseHelper {
     final db = await database;
     final result = await db.rawQuery('''
     WITH Last4Weeks AS (
-      SELECT date('now', '-28 days') AS start_date, 'Week 1' AS week_name UNION ALL
-      SELECT date('now', '-21 days'), 'Week 2' UNION ALL
-      SELECT date('now', '-14 days'), 'Week 3' UNION ALL
-      SELECT date('now', '-7 days'), 'Week 4'
+      SELECT date('now', '-35 days') AS start_date, 'Week 1' AS week_name UNION ALL
+      SELECT date('now', '-28 days'), 'Week 2' UNION ALL
+      SELECT date('now', '-21 days'), 'Week 3' UNION ALL
+      SELECT date('now', '-14 days'), 'Week 4'
     )
     SELECT 
       l.week_name,
@@ -478,99 +454,141 @@ class DatabaseHelper {
     }).toList();
   }
 
-  Future<int> insertOrder(double totalAmount, String orderDate) async {
-    final db = await database;
-    return await db.insert('orders', {
-      'order_date': orderDate,
-      'total_amount': totalAmount,
-    });
-  }
-
-  Future<int?> getProductId(String productName) async {
-    final db = await database;
-    List<Map<String, dynamic>> result = await db.query(
-      'menu',
-      columns: ['product_id'],
-      where: 'product_name = ?',
-      whereArgs: [productName],
-    );
-    return result.isNotEmpty ? result.first['product_id'] as int? : null;
-  }
-
-  Future<int> insertOrderDetail(
-    int orderId,
-    int productId,
-    int quantity,
-  ) async {
-    final db = await database;
-    return await db.insert('order_details', {
-      'order_id': orderId,
-      'product_id': productId,
-      'quantity': quantity,
-    });
-  }
-
-  Future<String?> getMostRecentDate() async {
-    final db = await database;
-    final result = await db.rawQuery('''
-      SELECT date(order_date) as recent_date FROM orders 
-      ORDER BY order_date DESC 
-      LIMIT 1
-    ''');
-    return result.isNotEmpty ? result.first['recent_date'] as String? : null;
+  // Helper function to get today's date in yyyy-MM-dd format
+  String getFormattedToday() {
+    final today = DateTime.now();
+    return "${today.year.toString().padLeft(4, '0')}-"
+        "${today.month.toString().padLeft(2, '0')}-"
+        "${today.day.toString().padLeft(2, '0')}";
   }
 
   Future<double> getTodaySales() async {
     final db = await database;
-    final recentDate = await getMostRecentDate();
-    if (recentDate == null) return 0.0;
+    final formattedToday = getFormattedToday();
 
     final result = await db.rawQuery(
       '''
-      SELECT SUM(total_amount) as total FROM orders 
-      WHERE date(order_date) = ?
-      ''',
-      [recentDate],
+    SELECT SUM(total_amount) as total FROM orders 
+    WHERE date(order_date) = ?
+    ''',
+      [formattedToday],
     );
 
-    return result.first['total'] != null
+    return result.isNotEmpty && result.first['total'] != null
         ? (result.first['total'] as double)
         : 0.0;
   }
 
   Future<double> getWeeklySales() async {
     final db = await database;
-    final recentDate = await getMostRecentDate();
-    if (recentDate == null) return 0.0;
+    final formattedToday = getFormattedToday();
 
     final result = await db.rawQuery(
       '''
-      SELECT SUM(total_amount) as total FROM orders 
-      WHERE date(order_date) BETWEEN date(?, '-6 days') AND ?
-      ''',
-      [recentDate, recentDate],
+    SELECT SUM(total_amount) as total FROM orders 
+    WHERE date(order_date) BETWEEN date(?, '-7 days') AND date(?, '-1 day')
+    ''',
+      [formattedToday, formattedToday],
     );
 
-    return result.first['total'] != null
+    return result.isNotEmpty && result.first['total'] != null
         ? (result.first['total'] as double)
         : 0.0;
   }
 
   Future<double> getMonthlySales() async {
     final db = await database;
-    final recentDate = await getMostRecentDate();
-    if (recentDate == null) return 0.0;
+    final formattedToday = getFormattedToday();
 
     final result = await db.rawQuery(
       '''
-      SELECT SUM(total_amount) as total FROM orders 
-      WHERE date(order_date) BETWEEN date(?, '-29 days') AND ?
-      ''',
-      [recentDate, recentDate],
+    SELECT SUM(total_amount) as total FROM orders 
+    WHERE date(order_date) BETWEEN date(?, '-37 days') AND date(?, '-8 days')
+    ''',
+      [formattedToday, formattedToday],
     );
 
-    return result.first['total'] != null
+    return result.isNotEmpty && result.first['total'] != null
         ? (result.first['total'] as double)
         : 0.0;
+  }
+
+  Future<void> resetDailySales() async {
+    final db = await database;
+    final today = getFormattedToday();
+
+    await db.rawDelete(
+      '''
+    DELETE FROM order_details 
+    WHERE order_id IN (
+      SELECT order_id FROM orders 
+      WHERE date(order_date) = ?
+    )
+    ''',
+      [today],
+    );
+
+    await db.rawDelete(
+      '''
+    DELETE FROM orders 
+    WHERE date(order_date) = ?
+    ''',
+      [today],
+    );
+  }
+
+  Future<void> resetWeeklySales() async {
+    final db = await database;
+    final today = getFormattedToday();
+
+    await db.rawDelete(
+      '''
+    DELETE FROM order_details 
+    WHERE order_id IN (
+      SELECT order_id FROM orders 
+      WHERE date(order_date) BETWEEN date(?, '-7 days') AND date(?, '-1 day')
+    )
+    ''',
+      [today, today],
+    );
+
+    await db.rawDelete(
+      '''
+    DELETE FROM orders 
+    WHERE date(order_date) BETWEEN date(?, '-7 days') AND date(?, '-1 day')
+    ''',
+      [today, today],
+    );
+  }
+
+  Future<void> resetMonthlySales() async {
+    final db = await database;
+    final today = getFormattedToday();
+
+    await db.rawDelete(
+      '''
+    DELETE FROM order_details 
+    WHERE order_id IN (
+      SELECT order_id FROM orders 
+      WHERE date(order_date) BETWEEN date(?, '-37 days') AND date(?, '-8 days')
+    )
+    ''',
+      [today, today],
+    );
+
+    await db.rawDelete(
+      '''
+    DELETE FROM orders 
+    WHERE date(order_date) BETWEEN date(?, '-37 days') AND date(?, '-8 days')
+    ''',
+      [today, today],
+    );
+  }
+
+  Future<void> resetAllSales() async {
+    final db = await database;
+
+    await db.rawDelete('DELETE FROM order_details');
+    await db.rawDelete('DELETE FROM orders');
   }
 }

@@ -285,7 +285,7 @@ class _POSScreenState extends State<POSScreen> {
     pdf.addPage(
       pw.Page(
         pageFormat: const PdfPageFormat(
-          80 * PdfPageFormat.mm,
+          70 * PdfPageFormat.mm,
           200 * PdfPageFormat.mm,
         ).applyMargin(left: 2, right: 2, top: 2, bottom: 2),
         build: (pw.Context context) {
@@ -493,9 +493,9 @@ class _POSScreenState extends State<POSScreen> {
                       mainAxisSize: pw.MainAxisSize.min,
                       children: [
                         pw.Container(
-                          width: 80, // Adjusted width
+                          width: 60, // Adjusted width
                           child: pw.Text(
-                            'TOTAL:',
+                            'Rs. ${_totalAmount.toStringAsFixed(0)}',
                             style: pw.TextStyle(
                               fontSize: 10, // Smaller font size
                               fontWeight: pw.FontWeight.bold,
@@ -503,9 +503,9 @@ class _POSScreenState extends State<POSScreen> {
                           ),
                         ),
                         pw.Container(
-                          width: 60, // Adjusted width
+                          width: 80, // Adjusted width
                           child: pw.Text(
-                            'Rs. ${_totalAmount.toStringAsFixed(0)}',
+                            'TOTAL:',
                             style: pw.TextStyle(
                               fontSize: 10, // Smaller font size
                               fontWeight: pw.FontWeight.bold,

@@ -22,24 +22,6 @@ class _TotalSalesPageState extends State<TotalSalesPage> {
 
   String selectedTimeframe = "Last Month"; // Default selection
 
-  // Define your product categories
-  final List<String> productCategories = [
-    "Biryani",
-    "Pulao",
-    "Chi-Karahi",
-    "Chi-Kaleji",
-    "Qeema",
-    "Daal Mach",
-    "Channa",
-    "Murgh Channa",
-    "Anda Channa",
-    "Aalo Anda",
-    "Daal Channa",
-    "Aalo Palak",
-    "Mix Sabzi",
-    "Kari Pakora",
-  ];
-
   final DatabaseHelper _dbHelper = DatabaseHelper();
 
   @override
@@ -226,11 +208,9 @@ class _TotalSalesPageState extends State<TotalSalesPage> {
                     fontWeight: FontWeight.bold,
                   ),
                   items:
-                      [
-                        "Last Month",
-                        "Daily Sales",
-                        "Top Products", // New option
-                      ].map((String value) {
+                      ["Last Month", "Daily Sales", "Top Products"].map((
+                        String value,
+                      ) {
                         return DropdownMenuItem<String>(
                           value: value,
                           child: Text(value),
@@ -394,6 +374,15 @@ class _TotalSalesPageState extends State<TotalSalesPage> {
           (a, b) => b.value['quantity']!.compareTo(a.value['quantity']!),
         );
 
+    // Calculate dynamic maxY based on the highest quantity
+    final maxQuantity =
+        sortedCategories.isNotEmpty
+            ? sortedCategories.first.value['quantity']!
+            : 0;
+
+    // Add some padding to the maxY so bars don’t touch the top
+    final adjustedMaxY = (maxQuantity * 1.2).ceilToDouble();
+
     // Prepare chart data
     List<BarChartGroupData> barGroups = [];
     List<String> categoryLabels = [];
@@ -419,14 +408,14 @@ class _TotalSalesPageState extends State<TotalSalesPage> {
 
     return BarChart(
       BarChartData(
-        maxY: 500,
+        maxY: adjustedMaxY,
         minY: 0,
         barGroups: barGroups,
         titlesData: FlTitlesData(
           leftTitles: AxisTitles(
             sideTitles: SideTitles(
               showTitles: true,
-              interval: 50,
+
               reservedSize: 40,
               getTitlesWidget: (value, _) {
                 return Text(
@@ -497,20 +486,6 @@ class _TotalSalesPageState extends State<TotalSalesPage> {
     int exponent = maxSales.toInt().toString().length - 1;
     double roundFactor = pow(10, exponent).toDouble();
     return ((maxSales / roundFactor).ceil() * roundFactor).toDouble();
-  }
-
-  // ignore: unused_element
-  double _calculateMaxYForTopProducts(
-    List<MapEntry<String, dynamic>> categories,
-  ) {
-    if (categories.isEmpty) return 500; // Changed from 1000 to 500
-
-    double maxQuantity = categories
-        .map((e) => (e.value as num).toDouble())
-        .reduce((a, b) => a > b ? a : b);
-
-    // Round up to nearest 50, with minimum of 500
-    return maxQuantity < 500 ? 500 : (maxQuantity / 50).ceil() * 50;
   }
 
   List<BarChartGroupData> _getBarGroups() {

@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'database_helper.dart';
+import 'package:nexus_desktop/database_helper.dart';
 
 class ResetPage extends StatefulWidget {
   const ResetPage({super.key});
@@ -33,124 +33,27 @@ class _ResetPageState extends State<ResetPage> {
     });
   }
 
-  Future<void> resetDailySales() async {
-    final db = await dbHelper.database;
-    final recentDate = await dbHelper.getMostRecentDate();
-    if (recentDate == null) return;
-
-    // Get today's date in the same format as stored in the database
-    final today = DateTime.now();
-    final todayString =
-        "${today.year}-${today.month.toString().padLeft(2, '0')}-${today.day.toString().padLeft(2, '0')}";
-
-    // Proceed only if the recentDate is today's date
-    if (recentDate == todayString) {
-      // Delete order_details first
-      await db.rawDelete(
-        '''
-      DELETE FROM order_details 
-      WHERE order_id IN (
-        SELECT order_id FROM orders 
-        WHERE date(order_date) = ?
-      )
-      ''',
-        [recentDate],
-      );
-
-      // Then delete the orders
-      await db.rawDelete(
-        '''
-      DELETE FROM orders 
-      WHERE date(order_date) = ?
-      ''',
-        [recentDate],
-      );
-
-      await fetchSalesData();
-    }
-  }
-
-  Future<void> resetWeeklySales() async {
-    final db = await dbHelper.database;
-    final recentDate = await dbHelper.getMostRecentDate();
-    if (recentDate == null) return;
-
-    // Delete order_details first
-    await db.rawDelete(
-      '''
-      DELETE FROM order_details 
-      WHERE order_id IN (
-        SELECT order_id FROM orders 
-        WHERE date(order_date) BETWEEN date(?, '-6 days') AND ?
-      )
-    ''',
-      [recentDate, recentDate],
-    );
-
-    // Then delete the orders
-    await db.rawDelete(
-      '''
-      DELETE FROM orders 
-      WHERE date(order_date) BETWEEN date(?, '-6 days') AND ?
-    ''',
-      [recentDate, recentDate],
-    );
-
-    await fetchSalesData();
-  }
-
-  Future<void> resetMonthlySales() async {
-    final db = await dbHelper.database;
-    final recentDate = await dbHelper.getMostRecentDate();
-    if (recentDate == null) return;
-
-    // Delete order_details first
-    await db.rawDelete(
-      '''
-      DELETE FROM order_details 
-      WHERE order_id IN (
-        SELECT order_id FROM orders 
-        WHERE date(order_date) BETWEEN date(?, '-29 days') AND ?
-      )
-    ''',
-      [recentDate, recentDate],
-    );
-
-    // Then delete the orders
-    await db.rawDelete(
-      '''
-      DELETE FROM orders 
-      WHERE date(order_date) BETWEEN date(?, '-29 days') AND ?
-    ''',
-      [recentDate, recentDate],
-    );
-
-    await fetchSalesData();
-  }
-
-  Future<void> resetAll() async {
-    final db = await dbHelper.database;
-
-    // Delete all order_details
-    await db.rawDelete('DELETE FROM order_details');
-
-    // Delete all orders
-    await db.rawDelete('DELETE FROM orders');
-
-    await fetchSalesData();
+  Future<void> resetSales(Function resetFunction) async {
+    await resetFunction();
+    fetchSalesData(); // Refresh the sales data after reset
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.grey.shade100,
+      backgroundColor: Color(0xFFD7BDA6),
       appBar: AppBar(
         title: const Text(
           "Reset Options",
-          style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+          style: TextStyle(
+            fontSize: 22,
+            fontWeight: FontWeight.bold,
+            color: Color(0xFFD7BDA6),
+          ),
         ),
-        backgroundColor: const Color.fromARGB(255, 96, 140, 162),
+        backgroundColor: const Color(0xFF6d3914),
         elevation: 4,
+        automaticallyImplyLeading: false,
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
@@ -161,27 +64,30 @@ class _ResetPageState extends State<ResetPage> {
               value: "Rs ${monthlySales.toStringAsFixed(0)}",
               icon: Icons.trending_up,
               color: const Color.fromARGB(255, 104, 205, 153),
-              onReset: resetMonthlySales,
+              onReset: () => resetSales(dbHelper.resetMonthlySales),
             ),
             _buildResetCard(
               title: "Weekly Sales",
               value: "Rs ${weeklySales.toStringAsFixed(0)}",
               icon: Icons.trending_up,
               color: Colors.blueAccent,
-              onReset: resetWeeklySales,
+              onReset: () => resetSales(dbHelper.resetWeeklySales),
             ),
             _buildResetCard(
               title: "Daily Sales",
               value: "Rs ${dailySales.toStringAsFixed(0)}",
               icon: Icons.trending_up,
               color: const Color.fromARGB(255, 45, 20, 206),
-              onReset: resetDailySales,
+              onReset: () => resetSales(dbHelper.resetDailySales),
             ),
           ],
         ),
       ),
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: resetAll,
+        onPressed: () async {
+          await dbHelper.resetAllSales();
+          fetchSalesData();
+        },
         backgroundColor: Colors.red.shade600,
         icon: const Icon(Icons.restore, color: Colors.white),
         label: const Text(
@@ -203,12 +109,19 @@ class _ResetPageState extends State<ResetPage> {
     required Color color,
     required VoidCallback onReset,
   }) {
+    final screenHeight = MediaQuery.of(context).size.height;
+    final screenWidth = MediaQuery.of(context).size.width;
+
+    double sw(double value) => screenWidth * (value / 1920);
+    double sh(double value) => screenHeight * (value / 1080);
+
     return Card(
+      color: Color.fromARGB(255, 241, 213, 187),
       elevation: 5,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      margin: const EdgeInsets.symmetric(vertical: 10),
+      margin: EdgeInsets.symmetric(vertical: sh(10)),
       child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 24),
+        padding: EdgeInsets.symmetric(vertical: sh(20), horizontal: sw(24)),
         decoration: BoxDecoration(borderRadius: BorderRadius.circular(16)),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -219,22 +132,23 @@ class _ResetPageState extends State<ResetPage> {
                   backgroundColor: color.withOpacity(0.2),
                   child: Icon(icon, color: color, size: 28),
                 ),
-                const SizedBox(width: 16),
+                SizedBox(width: sw(16)),
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
                       title,
-                      style: const TextStyle(
-                        fontSize: 18,
+                      style: TextStyle(
+                        fontSize: sw(18),
                         fontWeight: FontWeight.w600,
+                        color: Color(0xFFAB7843),
                       ),
                     ),
                     const SizedBox(height: 4),
                     Text(
                       value,
                       style: TextStyle(
-                        fontSize: 22,
+                        fontSize: sw(22),
                         fontWeight: FontWeight.bold,
                         color: color,
                       ),
